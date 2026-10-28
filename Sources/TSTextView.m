@@ -21,6 +21,7 @@
  */
 
 #import "TSTextView.h"
+#import "TSAutomaticEnvironment.h"
 #import "TSLaTeXPanelController.h"
 
 // added by mitsu --(A) g_texChar filtering
@@ -89,6 +90,23 @@ static const CFAbsoluteTime MAX_WAIT_TIME = 10.0;
         if (!(escapes % 2)) return NSMakeRange(NSNotFound, 0);
     }
     return NSMakeRange(start, selection.location - start);
+}
+
+- (BOOL)insertAutomaticEnvironmentEnd
+{
+    if (self.hasMarkedText || ![self.document fileIsTex] ||
+        [SUD boolForKey:@"DisableAutomaticEnvironmentCompletion"]) return NO;
+    NSRange range = self.selectedRange;
+    NSDictionary *completion = TSAutomaticEnvironmentInsertion(self.string, range, g_texChar);
+    if (!completion) return NO;
+    NSString *insertion = completion[@"text"];
+    [self dismissCommandSuggestions];
+    if (![self shouldChangeTextInRange:range replacementString:insertion]) return YES;
+    [self.textStorage replaceCharactersInRange:range withString:insertion];
+    [self didChangeText];
+    [self setSelectedRange:NSMakeRange(range.location + [completion[@"caret"] unsignedIntegerValue], 0)];
+    [self.undoManager setActionName:NSLocalizedString(@"Environment Completion", @"Environment Completion")];
+    return YES;
 }
 
 - (void)dismissCommandSuggestions

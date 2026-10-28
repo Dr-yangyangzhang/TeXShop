@@ -46,6 +46,7 @@
 - (NSRange)selectionRangeForProposedRange:(NSRange)proposedSelRange granularity:(NSSelectionGranularity)granularity;
 
 // - (void)setDocument: (TSDocument *)doc;
+- (BOOL)insertAutomaticEnvironmentEnd;
 - (void)registerForCommandCompletion: (id)sender;
 - (NSString *)getDragnDropMacroString: (NSString *)fileExt;
 - (NSString *)readSourceFromEquationEditorPDF: (NSString *)filePath;

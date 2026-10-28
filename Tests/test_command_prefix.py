@@ -17,3 +17,9 @@ with tempfile.TemporaryDirectory() as folder:
     (path / "test.m").write_text(template.replace("/* COMMAND_RANGE_IMPLEMENTATION */", source[start:end]))
     subprocess.run(["xcrun", "clang", "-isysroot", sdk, "-fobjc-arc", "-framework", "Cocoa", str(path / "test.m"), "-o", str(path / "test")], env=env, check=True)
     subprocess.run([str(path / "test")], check=True)
+
+# Compile the same pure transformation used by Return in the source editor.
+with tempfile.TemporaryDirectory() as folder:
+    binary = str(Path(folder) / "environment-tests")
+    subprocess.run(["xcrun", "clang", "-isysroot", sdk, "-fobjc-arc", "-framework", "Foundation", str(root / "Tests/EnvironmentCompletionTests.m"), "-o", binary], env=env, check=True)
+    subprocess.run([binary], check=True)

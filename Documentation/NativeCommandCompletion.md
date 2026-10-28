@@ -74,3 +74,60 @@ To re-enable, use `-bool NO`. This is an advanced defaults setting, not a new
 Preferences control. The feature is isolated on its branch; do not merge until the
 manual checks pass. Reverting the feature commit removes the popup independently
 of the missing-resource build cleanup.
+
+## Return after an environment opener
+
+At the end of a line containing `\begin{document}`, press Return. The editor inserts:
+
+```tex
+\begin{document}
+
+\end{document}
+```
+
+The caret stays on the blank line. Leading tabs/spaces are preserved. Named and
+starred environments and simple optional/required arguments are supported. An
+existing matching end is respected, including nested environments of the same name;
+commented-out or escaped ends do not suppress completion. Lines containing other
+source text, comments, active IME composition, or selected text use ordinary Return.
+Parsing verbatim content and arbitrary TeX macro expansion is outside this feature.
+
+Validate with document, itemize, align*, and an indented opener. Undo should restore
+the opener; pressing Return before an existing matching end must not duplicate it.
+Disable separately with `defaults write TeXShop DisableAutomaticEnvironmentCompletion -bool YES`.
+The native test runner now checks 13 command-prefix and 19 environment cases.
+Interactive Return acceptance remains pending until the running app can be restarted
+without risking its current Untitled document.
+
+## Automatic multi-pass typesetting
+
+TeXShop already supports this through its latexmk engines. Select **pdflatexmk**
+in the program dropdown for pdfLaTeX, or **xelatexmk** for XeLaTeX, then Typeset.
+This branch promotes the existing xelatexmk engine from Inactive to the active
+bundled engines and installs it on launch only if an active engine with that name
+is absent. Customized active scripts are preserved.
+
+For a persistent per-document choice, add one of these as the first line:
+
+```tex
+% !TEX TS-program = pdflatexmk
+```
+
+or
+
+```tex
+% !TEX TS-program = xelatexmk
+```
+
+Latexmk runs the selected LaTeX engine, invokes BibTeX when needed, and repeats
+LaTeX until citations and cross-references settle. It may skip unnecessary passes;
+this is not a fixed four-command sequence. Choosing plain LaTeX or XeLaTeX still
+performs its usual single run. TeXShop's existing root-file directives continue to
+control multi-file projects.
+
+Both actual bundled scripts were run against a fresh article with a BibTeX
+bibliography and a section cross-reference. Both produced a PDF and .bbl with
+resolved references in the final log. To validate in the UI, restart the development
+app, select each engine on a small citation document, press Typeset once, and
+confirm that the citation and section reference are resolved. A normal TeX Live
+installation (including latexmk, BibTeX and the selected engine) is required.

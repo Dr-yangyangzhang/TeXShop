@@ -7456,6 +7456,8 @@ if (! useFullSplitWindow) {
 {
 
 	if (aSelector == @selector (insertNewline:)) {
+        if ([aTextView isKindOfClass:[TSTextView class]] &&
+            [(TSTextView *)aTextView insertAutomaticEnvironmentEnd]) return YES;
 		NSInteger n, indentTab, indentSpace = 0;
 
 		indentTab = [self textViewCountTabs: textView andSpaces: &indentSpace];
