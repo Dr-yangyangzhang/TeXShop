@@ -7,7 +7,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root / "Sources/TSTextView.m").read_text()
 start = source.index("- (NSRange)automaticCommandRange")
-end = source.index("- (void)dismissCommandSuggestions", start)
+end = source.index("- (BOOL)insertAutomaticEnvironmentEnd", start)
 template = (root / "Tests/CommandPrefixTests.m.in").read_text()
 env = dict(os.environ)
 env.setdefault("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
