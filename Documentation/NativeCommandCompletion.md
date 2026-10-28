@@ -14,8 +14,9 @@ This milestone lists direct command templates, including starred and optional
 argument variants. Aliases and environment expansion templates remain handled by
 legacy completion. Internal template markers and placeholder text are removed from
 popup entries. Automatic acceptance does not add template trailing newlines.
-Reference/citation argument lookup, package/project indexing, custom macro discovery,
-and verbatim-environment parsing are outside this milestone.
+Common argument values and current-document labels are covered below. Citation keys,
+installed package/project indexing, custom macro discovery and verbatim parsing
+remain outside this milestone.
 
 ## Build with Xcode 27
 
@@ -96,8 +97,7 @@ Validate with document, itemize, align*, and an indented opener. Undo should res
 the opener; pressing Return before an existing matching end must not duplicate it.
 Disable separately with `defaults write TeXShop DisableAutomaticEnvironmentCompletion -bool YES`.
 The native test runner now checks 13 command-prefix and 19 environment cases.
-Interactive Return acceptance remains pending until the running app can be restarted
-without risking its current Untitled document.
+Interactive Return insertion and caret placement have now been verified in the rebuilt app.
 
 ## Automatic multi-pass typesetting
 
@@ -131,3 +131,80 @@ resolved references in the final log. To validate in the UI, restart the develop
 app, select each engine on a small citation document, press Typeset once, and
 confirm that the citation and section reference are resolved. A normal TeX Live
 installation (including latexmk, BibTeX and the selected engine) is required.
+
+## Contextual argument suggestions and Greek commands
+
+The same popup now offers common values inside `\documentclass{}` (including
+article/report/book), `\begin{}` and `\end{}`, `\usepackage{}` and
+`\RequirePackage{}`, and `\bibliographystyle{}`. Package lists complete the token
+after the last comma. Reference commands offer labels from the current document,
+excluding commented labels. Optional command arguments are recognized. Accepting a
+suggestion preserves the surrounding command and braces, including when editing
+in the middle of a token. These are curated common catalogs, not a claim that a
+particular class/package is installed. Citation keys and project-wide indexes are
+not implemented yet.
+
+Greek commands are present directly in the command catalog: typing `\al` offers
+`\alpha`; shorthand aliases in the legacy completion file are no longer the only
+way to reach these symbols. Ordinary prose `al` does not trigger LaTeX commands.
+
+## Automatic workflow and opt-in Build on Save
+
+Choose **Typeset > Use Automatic Workflow**, or **AutoLaTeX** in the program dropdown.
+Then the normal Typeset button/shortcut builds using latexmk. No fixed four-pass
+recipe is necessary: latexmk runs the selected engine, BibTeX/Biber and repeat passes
+as dependencies require. A simple document may need fewer passes.
+
+**Typeset > Build on Save** enables Command-S-triggered compilation for the current
+open document and selects AutoLaTeX. It defaults off and resets when the document
+is reopened. This is an explicit Save feature, not a continuous background watcher
+or a trigger for system autosaves. Failed/cancelled saves do not build. Rapid saves
+coalesce; queued saves wait for an existing job rather than repeatedly killing it.
+Manual Typeset supersedes a queued save-triggered build. Disabling the toggle cancels
+queued work; an already-running build is stopped using the normal Abort command.
+
+AutoLaTeX defaults to pdfLaTeX, chooses XeLaTeX for recognized fontspec/xeCJK/ctex
+requirements, and LuaLaTeX for recognized Lua commands/packages. It reads literal
+input/include/subfile dependencies (bounded to 100 files and depth 16). Engine choice
+is a heuristic, not a TeX interpreter. It cannot infer arbitrary macros or every
+package's requirements. For an explicit choice within AutoLaTeX, add:
+
+```tex
+% !TEX TS-engine = xelatex
+```
+
+Allowed values are pdflatex, xelatex and lualatex. Existing TS-program/program
+comments retain TeXShop's normal precedence: they can select a different workflow,
+including a legacy engine that writes auxiliary files alongside the source.
+
+## Clean source folder and retained build files
+
+AutoLaTeX writes build artifacts to `.texshop-build/<document-name>/` beside the
+root source. On success it atomically publishes only the PDF beside the source.
+The hidden folder retains logs, auxiliary files, latexmk's dependency database and
+SyncTeX data for incremental builds and source/PDF synchronization. Intermediate
+files are still generated and saved; they are isolated rather than deleted after
+every compile. Existing auxiliary files are never removed or moved automatically.
+Your source assets, bibliography and included files remain where you put them.
+
+TeXShop's normal SyncTeX parser and log viewer can find the retained data. When
+switching back to a conventional engine, newer conventional files take precedence.
+Legacy custom SyncTeX parsers and unusually configured projects need further testing.
+Documents relying on custom jobnames/output directories or tools that require
+auxiliary files in the root should continue using a dedicated existing engine.
+
+## Latest validation
+
+`python3 Tests/test_command_prefix.py` passes 13 prefix, 19 environment, 16 argument
+and 5 build-path checks. `python3 Tests/test_autolatex.py` runs 8 engine-detection
+checks and actual pdfLaTeX/BibTeX, XeLaTeX/BibTeX, LuaLaTeX and Biber builds. It checks
+clean source folders, SyncTeX data, paths with spaces and preservation of the last
+PDF after a failed build. TeX Live's font caches must be writable for LuaLaTeX.
+The final Xcode Debug build uses the overrides above.
+
+Interactive validation confirmed article completion with Tab, Greek alpha suggestions,
+Return-triggered environment closing with correct caret placement, the automatic
+workflow menu, and Command-S producing and opening a PDF after enabling Build on
+Save. Further acceptance checks: repeated saves while compiling, cancelling a Save
+panel, root/child projects, both directions of SyncTeX in complex projects, BibDesk,
+real IME composition, large files and split source views.
