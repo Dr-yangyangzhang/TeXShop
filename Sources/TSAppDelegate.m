@@ -425,6 +425,14 @@
 				  toPath:[EngineInactivePath stringByStandardizingPath]];
 	}
     
+    // Make the bundled multi-pass XeLaTeX engine available to existing users too.
+    // Preserve any customized active engine; never replace it on launch.
+    NSString *xeEnginePath = [[EnginePath stringByStandardizingPath] stringByAppendingPathComponent:@"xelatexmk.engine"];
+    if (![fileManager fileExistsAtPath:xeEnginePath]) {
+        NSString *bundledEngine = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/Engines/xelatexmk.engine"];
+        [self mirrorPath:bundledEngine toPath:xeEnginePath];
+    }
+
     if (! [fileManager fileExistsAtPath: [HTMLHelpPath stringByStandardizingPath]] ){
         [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/HTML"]
               toPath:[HTMLHelpPath stringByStandardizingPath]];
