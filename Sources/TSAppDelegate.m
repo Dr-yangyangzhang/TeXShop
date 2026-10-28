@@ -433,6 +433,23 @@
         [self mirrorPath:bundledEngine toPath:xeEnginePath];
     }
 
+    NSString *autoEnginePath = [[EnginePath stringByStandardizingPath] stringByAppendingPathComponent:@"AutoLaTeX.engine"];
+    if (![fileManager fileExistsAtPath:autoEnginePath]) {
+        [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/Engines/AutoLaTeX.engine"] toPath:autoEnginePath];
+    }
+    // Find the Typeset menu by action, independent of localization.
+    for (NSMenuItem *top in NSApp.mainMenu.itemArray) {
+        NSMenu *menu = top.submenu;
+        BOOL isTypesetMenu = NO;
+        for (NSMenuItem *item in menu.itemArray) if (item.action == @selector(doTypeset:)) isTypesetMenu = YES;
+        if (isTypesetMenu) {
+            [menu addItem:[NSMenuItem separatorItem]];
+            [menu addItemWithTitle:NSLocalizedString(@"Use Automatic Workflow", @"Use Automatic Workflow") action:@selector(useAutomaticWorkflow:) keyEquivalent:@""];
+            [menu addItemWithTitle:NSLocalizedString(@"Build on Save", @"Build on Save") action:@selector(toggleBuildOnSave:) keyEquivalent:@""];
+            break;
+        }
+    }
+
     if (! [fileManager fileExistsAtPath: [HTMLHelpPath stringByStandardizingPath]] ){
         [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/HTML"]
               toPath:[HTMLHelpPath stringByStandardizingPath]];

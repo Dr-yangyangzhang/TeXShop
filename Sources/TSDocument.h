@@ -920,6 +920,9 @@ enum RootCommand
 - (void) doIndexTemp: sender;
 - (void) doMetaFontTemp: sender;
 - (IBAction) doTypeset: sender;
+- (void)cancelPendingAutomaticBuild;
+- (IBAction)useAutomaticWorkflow:(id)sender;
+- (IBAction)toggleBuildOnSave:(id)sender;
 - (IBAction) doAlternateTypeset: sender;
 - (IBAction) doUpdate: sender; // Tool to update tags and labels
 - (void) doTypesetForScriptContinuously:(BOOL)method;

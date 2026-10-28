@@ -22,6 +22,7 @@
 
 // Goto SECONDCOLOR to find code, commented out, to produce second yellow color
 
+#import "TSBuildPaths.h"
 #import "TSDocument.h"
 #import "TSTextView.h"
 #import "globals.h"
@@ -81,10 +82,10 @@
     if (! myFileName)
         return;
     
-    mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+    mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
     if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
     {
-        mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+        mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
         if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
             return;
     }
@@ -93,7 +94,7 @@
         synctex_scanner_free(scanner);
     scanner = NULL;
     
-    fileString = [myFileName cStringUsingEncoding:NSUTF8StringEncoding];
+    fileString = [[TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension:@"pdf"] fileSystemRepresentation];
     scanner = synctex_scanner_new_with_output_file(fileString, NULL, 1);
 }
 
@@ -138,10 +139,10 @@
 	if (! myFileName)
 		return NO;
 	
-	mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 	{ 
-		mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 	}
@@ -451,10 +452,10 @@
 	myFileName = [[self fileURL] path];
 	if (! myFileName)
 		return NO;
-	mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 		{ 
-		mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 		}
@@ -776,10 +777,10 @@
 	myFileName = [[self fileURL] path];
 	if (! myFileName)
 		return NO;
-	mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 		{ 
-		mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 		}
@@ -1561,10 +1562,10 @@
 	myFileName = [[self fileURL] path];
 	if (! myFileName)
 		return NO;
-	mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 	{ 
-		mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 	}
@@ -2001,10 +2002,10 @@
 	myFileName = [[self fileURL] path];
 	if (! myFileName)
 		return NO;
-	mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex"];
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 	{ 
-		mySyncTeXFileName = [[myFileName stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(myFileName) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 	}
@@ -2459,11 +2460,11 @@
 	// NSLog(@"Using New Source->Output Sync");
 	if (! rootFile)
 		return NO;
-	mySyncTeXFileName = [[rootFile stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+	mySyncTeXFileName = [TSSyncTeXOutputBase(rootFile) stringByAppendingPathExtension: @"synctex"];
 	
 	if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 	{ 
-		mySyncTeXFileName = [[rootFile stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+		mySyncTeXFileName = [TSSyncTeXOutputBase(rootFile) stringByAppendingPathExtension: @"synctex.gz"];
 		if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
 			return NO;
 	}
@@ -3048,11 +3049,11 @@
     // NSLog(@"Using New Source->Output Sync");
     if (! rootFile)
         return;
-    mySyncTeXFileName = [[rootFile stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex"];
+    mySyncTeXFileName = [TSSyncTeXOutputBase(rootFile) stringByAppendingPathExtension: @"synctex"];
     
     if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
     {
-        mySyncTeXFileName = [[rootFile stringByDeletingPathExtension] stringByAppendingPathExtension: @"synctex.gz"];
+        mySyncTeXFileName = [TSSyncTeXOutputBase(rootFile) stringByAppendingPathExtension: @"synctex.gz"];
         if (! [[NSFileManager defaultManager] fileExistsAtPath: mySyncTeXFileName])
             return;
     }

@@ -28,3 +28,8 @@ with tempfile.TemporaryDirectory() as folder:
     binary = str(Path(folder) / "argument-tests")
     subprocess.run(["xcrun", "clang", "-isysroot", sdk, "-fobjc-arc", "-framework", "Foundation", str(root / "Tests/ArgumentCompletionTests.m"), "-o", binary], env=env, check=True)
     subprocess.run([binary], check=True)
+
+with tempfile.TemporaryDirectory() as folder:
+    binary = str(Path(folder) / "build-path-tests")
+    subprocess.run(["xcrun", "clang", "-isysroot", sdk, "-fobjc-arc", "-framework", "Foundation", str(root / "Tests/BuildPathTests.m"), "-o", binary], env=env, check=True)
+    subprocess.run([binary], check=True)

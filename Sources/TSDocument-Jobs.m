@@ -1979,6 +1979,7 @@ if ((whichEngineLocal != 3) && (whichEngineLocal != 4) && (! fromMenu)) { //don'
 - (void) doTypeset: sender;
 
  {
+   [self cancelPendingAutomaticBuild];
    if (self.annotationsExist)
    {
        self.annotationsExist = NO;
