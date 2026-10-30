@@ -23,6 +23,7 @@
  */
 
 #import "TSAppDelegate.h"
+#import <CommonCrypto/CommonDigest.h>
 
 #import "globals.h"
 
@@ -434,7 +435,13 @@
     }
 
     NSString *autoEnginePath = [[EnginePath stringByStandardizingPath] stringByAppendingPathComponent:@"AutoLaTeX.engine"];
-    if (![fileManager fileExistsAtPath:autoEnginePath]) {
+    NSData *installedAutoEngine = [NSData dataWithContentsOfFile:autoEnginePath];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(installedAutoEngine.bytes, (CC_LONG)installedAutoEngine.length, digest);
+    NSMutableString *installedHash = [NSMutableString string];
+    for (NSUInteger byte = 0; byte < CC_SHA256_DIGEST_LENGTH; byte++) [installedHash appendFormat:@"%02x", digest[byte]];
+    // Upgrade only the exact previous bundled script; preserve user modifications.
+    if (!installedAutoEngine || [installedHash isEqualToString:@"1c29308483eb68ad9099215b8de2dcfbd720b5d6abd1da5a489636371ec7fb4f"]) {
         [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/Engines/AutoLaTeX.engine"] toPath:autoEnginePath];
     }
     // Find the Typeset menu by action, independent of localization.

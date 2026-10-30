@@ -66,6 +66,11 @@ if ($raw =~ /^\s*%\s*!TEX\s+(?:TS-engine|engine)\s*=\s*(\S+)/mi) {
     my %allowed = (pdflatex=>'pdflatex', xelatex=>'xelatex', lualatex=>'lualatex');
     $engine = $allowed{lc $1} or die "AutoLaTeX: unsupported engine '$1'; use pdflatex, xelatex or lualatex\n";
 }
+# Standard compiler directives remain engine hints inside the automatic workflow.
+if (!$engine && $raw =~ /^\s*%\s*!TEX\s+(?:TS-program|program)\s*=\s*(\S+)/mi) {
+    my %hints = (pdflatex=>'pdflatex', xelatex=>'xelatex', lualatex=>'lualatex', pdflatexmk=>'pdflatex', xelatexmk=>'xelatex', lualatexmk=>'lualatex');
+    $engine = $hints{lc $1};
+}
 my $code = read_project($source, 0);
 if (!$engine) {
     if ($code =~ /\\(?:directlua|latelua)\b|\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{[^}]*\b(?:luacode|luatexja|luaotfload)\b/) { $engine = 'lualatex'; }

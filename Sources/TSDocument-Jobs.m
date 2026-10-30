@@ -25,6 +25,7 @@
 #import "UseMitsu.h"
 
 #import "TSDocument.h"
+#import "TSAutomaticBuildPolicy.h"
 
 #import "MyPDFView.h"
 #import "MyPDFKitView.h"
@@ -777,7 +778,8 @@ if ((whichEngineLocal != 3) && (whichEngineLocal != 4) && (! fromMenu)) { //don'
 			if (newProgramRange.length > 0) {
 				programString = [[testString substringWithRange: newProgramRange]
 						stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-				programString = [programString lowercaseString];
+				programString = TSWorkflowProgram(programString,
+                    [[programButton titleOfSelectedItem] isEqualToString:@"AutoLaTeX"]);
 				if ([programString isEqualToString:@"pdftex"]) {
 					useTempEngine = YES;
 					tempEngine = TexEngine;

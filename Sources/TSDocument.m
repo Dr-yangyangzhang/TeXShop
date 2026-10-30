@@ -25,6 +25,7 @@
 // See MOUNTAINLIONFIX for patch for Mountain Lion and above
 
 #import "TSBuildPaths.h"
+#import "TSAutomaticBuildPolicy.h"
 #import "UseMitsu.h"
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
@@ -1684,6 +1685,9 @@ if (! skipTextWindow) {
 			}
 			break;
 	}
+    // Ordinary LaTeX documents should use the automatic, isolated build path.
+    // Explicit custom and Plain TeX defaults remain available.
+    if (defaultcommand == DefaultCommandLaTeX) [self useAutomaticWorkflow:nil];
 	[self fixMacroMenu];
 
 	// end change
@@ -3043,6 +3047,17 @@ else {
 	[aDictionary setObject: myNumber forKey: NSFileHFSCreatorCode];
 	return aDictionary;
  */
+}
+
+// Persist the opt-in setting across document windows and application launches.
+- (BOOL)buildOnSave
+{
+    return [SUD boolForKey:TSBuildOnSavePreference];
+}
+
+- (void)setBuildOnSave:(BOOL)enabled
+{
+    [SUD setBool:enabled forKey:TSBuildOnSavePreference];
 }
 
 - (void)cancelPendingAutomaticBuild

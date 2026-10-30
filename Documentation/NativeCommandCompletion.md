@@ -155,9 +155,8 @@ Then the normal Typeset button/shortcut builds using latexmk. No fixed four-pass
 recipe is necessary: latexmk runs the selected engine, BibTeX/Biber and repeat passes
 as dependencies require. A simple document may need fewer passes.
 
-**Typeset > Build on Save** enables Command-S-triggered compilation for the current
-open document and selects AutoLaTeX. It defaults off and resets when the document
-is reopened. This is an explicit Save feature, not a continuous background watcher
+**Typeset > Build on Save** enables Command-S-triggered compilation and selects AutoLaTeX. It defaults off; once enabled, the setting persists across document windows and
+application restarts. This is an explicit Save feature, not a continuous background watcher
 or a trigger for system autosaves. Failed/cancelled saves do not build. Rapid saves
 coalesce; queued saves wait for an existing job rather than repeatedly killing it.
 Manual Typeset supersedes a queued save-triggered build. Disabling the toggle cancels
@@ -173,9 +172,11 @@ package's requirements. For an explicit choice within AutoLaTeX, add:
 % !TEX TS-engine = xelatex
 ```
 
-Allowed values are pdflatex, xelatex and lualatex. Existing TS-program/program
-comments retain TeXShop's normal precedence: they can select a different workflow,
-including a legacy engine that writes auxiliary files alongside the source.
+Allowed values are pdflatex, xelatex and lualatex. In AutoLaTeX mode, standard TS-program/program compiler directives (pdflatex,
+xelatex, lualatex and their latexmk variants) select the compiler while retaining
+latexmk and the hidden build directory. Custom engine directives retain their normal
+precedence and can use a different output layout. Explicit legacy engine selections
+remain available.
 
 ## Clean source folder and retained build files
 
@@ -196,7 +197,7 @@ auxiliary files in the root should continue using a dedicated existing engine.
 ## Latest validation
 
 `python3 Tests/test_command_prefix.py` passes 13 prefix, 19 environment, 16 argument
-and 5 build-path checks. `python3 Tests/test_autolatex.py` runs 8 engine-detection
+and 5 build-path checks, plus 16 automatic-build policy checks. `python3 Tests/test_autolatex.py` runs 11 engine-detection
 checks and actual pdfLaTeX/BibTeX, XeLaTeX/BibTeX, LuaLaTeX and Biber builds. It checks
 clean source folders, SyncTeX data, paths with spaces and preservation of the last
 PDF after a failed build. TeX Live's font caches must be writable for LuaLaTeX.
@@ -208,3 +209,21 @@ workflow menu, and Command-S producing and opening a PDF after enabling Build on
 Save. Further acceptance checks: repeated saves while compiling, cancelling a Save
 panel, root/child projects, both directions of SyncTeX in complex projects, BibDesk,
 real IME composition, large files and split source views.
+
+## October 30 fixes and testing the correct application
+
+Ordinary LaTeX documents now select AutoLaTeX when opened, instead of silently
+returning to single-pass LaTeX. Explicit Plain TeX and custom default engine choices
+are preserved. Build on Save remains opt-in, but its setting now persists. Enable
+it once in Typeset > Build on Save; reopening the app should retain the checkmark.
+Standard compiler directives no longer bypass the automatic recipe in AutoLaTeX mode.
+
+The installer upgrades an exact copy of the previous bundled AutoLaTeX script;
+customized scripts are preserved. This avoids leaving existing installations with
+an outdated engine after rebuilding the app.
+
+The installed `/Applications/TeXShop.app` is not replaced by a development build.
+Close other TeXShop instances before testing the rebuilt preview and check that the
+program dropdown says AutoLaTeX. Files produced by older builds are not deleted:
+validate output placement in a fresh folder to distinguish new artifacts from old
+ones. Screen sharing is not needed for automated tests or Git publication.

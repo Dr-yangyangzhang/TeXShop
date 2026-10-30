@@ -23,6 +23,9 @@ for index, (source, expected) in enumerate([
     ("% !TEX TS-engine = lualatex\n\\usepackage{fontspec}", "lualatex"),
     ("% \\usepackage{fontspec}\n\\documentclass{article}", "pdflatex"),
     (r"\input{preamble}", "xelatex"),
+    ("% !TEX program = xelatex\n\\documentclass{article}", "xelatex"),
+    ("% !TEX TS-program = lualatex\n\\documentclass{article}", "lualatex"),
+    ("% !TEX program = pdflatex\n\\usepackage{fontspec}", "pdflatex"),
 ]):
     folder = base / f"detect-{index}"
     folder.mkdir()
@@ -30,7 +33,7 @@ for index, (source, expected) in enumerate([
     (folder / "preamble.tex").write_text(r"\usepackage{fontspec}\input{preamble}")
     result = invoke(folder, True)
     assert result.returncode == 0 and f"selected {expected};" in result.stdout, result.stdout
-print("8 engine detection checks passed", flush=True)
+print("11 engine detection checks passed", flush=True)
 
 for name, preamble, bibliography in [
     ("pdf with spaces", "", "bibtex"),
