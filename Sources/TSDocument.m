@@ -24,6 +24,8 @@
 
 // See MOUNTAINLIONFIX for patch for Mountain Lion and above
 
+#import "TSBuildPaths.h"
+#import "TSAutomaticBuildPolicy.h"
 #import "UseMitsu.h"
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
@@ -66,6 +68,8 @@
 #define MAXNUMOFTABS 20
 
 @interface TSDocument ()
+@property BOOL buildOnSave;
+@property NSUInteger automaticBuildRequest;
 - (void)setConsoleBackgroundColorFromPreferences:(NSNotification *)notification;
 - (void)setConsoleForegroundColorFromPreferences:(NSNotification *)notification;
 - (void)setLogWindowBackgroundColorFromPreferences:(NSNotification *)notification;
@@ -1681,6 +1685,9 @@ if (! skipTextWindow) {
 			}
 			break;
 	}
+    // Ordinary LaTeX documents should use the automatic, isolated build path.
+    // Explicit custom and Plain TeX defaults remain available.
+    if (defaultcommand == DefaultCommandLaTeX) [self useAutomaticWorkflow:nil];
 	[self fixMacroMenu];
 
 	// end change
@@ -3042,9 +3049,67 @@ else {
  */
 }
 
+// Persist the opt-in setting across document windows and application launches.
+- (BOOL)buildOnSave
+{
+    return [SUD boolForKey:TSBuildOnSavePreference];
+}
+
+- (void)setBuildOnSave:(BOOL)enabled
+{
+    [SUD setBool:enabled forKey:TSBuildOnSavePreference];
+}
+
+- (void)cancelPendingAutomaticBuild
+{
+    self.automaticBuildRequest++;
+}
+
+- (IBAction)useAutomaticWorkflow:(id)sender
+{
+    NSInteger index = [programButton indexOfItemWithTitle:@"AutoLaTeX"];
+    if (index < 0) return;
+    [programButton selectItemAtIndex:index];
+    [sprogramButton selectItemAtIndex:index];
+    [programButtonEE selectItemAtIndex:index];
+    whichEngine = index + 1;
+}
+
+- (IBAction)toggleBuildOnSave:(id)sender
+{
+    self.buildOnSave = !self.buildOnSave;
+    self.automaticBuildRequest++;
+    if (self.buildOnSave) [self useAutomaticWorkflow:nil];
+}
+
+- (void)automaticBuildSaveFinished:(NSDocument *)document didSave:(BOOL)didSave contextInfo:(void *)contextInfo
+{
+    if (!didSave || !self.buildOnSave) return;
+    [self scheduleAutomaticBuild:++self.automaticBuildRequest];
+}
+
+- (void)scheduleAutomaticBuild:(NSUInteger)request
+{
+    __weak TSDocument *document = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        TSDocument *doc = document;
+        if (!doc || !doc.buildOnSave || doc.automaticBuildRequest != request || !doc.fileURL || !doc.windowControllers.count) return;
+        // Coalesce saves and wait for the running job instead of repeatedly terminating it.
+        if (doc.texTask.isRunning || doc.bibTask.isRunning || doc.indexTask.isRunning) {
+            [doc scheduleAutomaticBuild:request];
+            return;
+        }
+        if (![doc isDocumentEdited]) [doc doTypeset:doc];
+    });
+}
+
 - (void)saveDocument: (id)sender
 {
-	[super saveDocument: sender];
+	if (self.buildOnSave && fileIsTex) {
+        [self saveDocumentWithDelegate:self didSaveSelector:@selector(automaticBuildSaveFinished:didSave:contextInfo:) contextInfo:nil];
+    } else {
+        [super saveDocument: sender];
+    }
   
 	// if CommandCompletion list is being saved, reload it.
 	if (!fileIsTex && [[[self fileURL] path] isEqualToString:
@@ -6415,6 +6480,15 @@ if (! useFullSplitWindow) {
 
 - (BOOL)validateMenuItem:(NSMenuItem *)anItem
 {
+    if (anItem.action == @selector(toggleBuildOnSave:)) {
+        anItem.state = self.buildOnSave ? NSControlStateValueOn : NSControlStateValueOff;
+        return fileIsTex && !_externalEditor;
+    }
+    if (anItem.action == @selector(useAutomaticWorkflow:)) {
+        anItem.state = [[programButton titleOfSelectedItem] isEqualToString:@"AutoLaTeX"] ? NSControlStateValueOn : NSControlStateValueOff;
+        return fileIsTex && [programButton indexOfItemWithTitle:@"AutoLaTeX"] >= 0;
+    }
+
     
     if ([anItem action] == @selector(toggleSyntaxColor:))
     {
@@ -7177,7 +7251,7 @@ if (! useFullSplitWindow) {
     NSInteger           mainOffset;
     
     NSString    *myPath = [[self fileURL] path];
-    NSString    *logPath = [[myPath stringByDeletingPathExtension] stringByAppendingPathExtension:@"log"];
+    NSString    *logPath = TSBuildArtifactPath(myPath, @"log");
     NSString    *logContents = [NSString stringWithContentsOfFile:logPath encoding:theEncoding error:&error];
     if (logContents == nil)
         logContents = [NSString stringWithContentsOfFile:logPath encoding:NSISOLatin9StringEncoding error:&error];
@@ -7456,6 +7530,8 @@ if (! useFullSplitWindow) {
 {
 
 	if (aSelector == @selector (insertNewline:)) {
+        if ([aTextView isKindOfClass:[TSTextView class]] &&
+            [(TSTextView *)aTextView insertAutomaticEnvironmentEnd]) return YES;
 		NSInteger n, indentTab, indentSpace = 0;
 
 		indentTab = [self textViewCountTabs: textView andSpaces: &indentSpace];
@@ -10257,7 +10333,7 @@ static NSArray *tabStopArrayForFontAndTabWidth(NSFont *font, NSUInteger tabWidth
 	// logPath = [[[self fileName] stringByDeletingPathExtension] stringByAppendingPathExtension:@"log"];
 	if (self.logExtension == nil)
 		return NO;
-	logPath = [[[[self fileURL] path]stringByDeletingPathExtension] stringByAppendingPathExtension:self.logExtension];
+	logPath = TSBuildArtifactPath(self.fileURL.path, self.logExtension);
 
 	if ([[NSFileManager defaultManager] fileExistsAtPath: logPath] && [[NSFileManager defaultManager] isReadableFileAtPath: logPath]) 
 		{

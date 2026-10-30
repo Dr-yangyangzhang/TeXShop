@@ -21,6 +21,8 @@
  */
 
 #import "TSTextView.h"
+#import "TSAutomaticEnvironment.h"
+#import "TSArgumentCompletion.h"
 #import "TSLaTeXPanelController.h"
 
 // added by mitsu --(A) g_texChar filtering
@@ -50,7 +52,202 @@ static const CFAbsoluteTime MAX_WAIT_TIME = 10.0;
 
 // end addition
 
+// Command suggestions are local to each source view, including split views.
+@interface TSTextView () <NSTableViewDataSource, NSTableViewDelegate>
+@property (strong) NSPanel *commandPanel;
+@property (strong) NSTableView *commandTable;
+@property (copy) NSArray<NSString *> *commandCandidates;
+@property (copy) NSArray<NSString *> *commandCatalog;
+@property (copy) NSString *commandCatalogSource;
+@property NSRange commandPrefixRange;
+@property NSUInteger commandRequest;
+@property BOOL completingArgument;
+@end
+
 @implementation TSTextView
+// No project scanning, external process, or network work occurs while typing.
+- (NSRange)automaticCommandRange
+{
+    NSRange selection = self.selectedRange;
+    NSString *text = self.string;
+    if (selection.length || selection.location > text.length || self.hasMarkedText ||
+        ![self.document fileIsTex]) return NSMakeRange(NSNotFound, 0);
+    NSUInteger start = selection.location;
+    while (start > 0) {
+        unichar c = [text characterAtIndex:start - 1];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) break;
+        start--;
+    }
+    if (selection.location - start < 2 || start == 0 ||
+        [text characterAtIndex:start - 1] != g_texChar) return NSMakeRange(NSNotFound, 0);
+    start--;
+    NSUInteger slashes = 0, pos = start;
+    while (pos > 0 && [text characterAtIndex:pos - 1] == g_texChar) { slashes++; pos--; }
+    if (slashes % 2) return NSMakeRange(NSNotFound, 0);
+    NSRange line = [text lineRangeForRange:NSMakeRange(start, 0)];
+    for (NSUInteger i = line.location; i < start; i++) {
+        if ([text characterAtIndex:i] != '%') continue;
+        NSUInteger escapes = 0, j = i;
+        while (j > line.location && [text characterAtIndex:j - 1] == g_texChar) { escapes++; j--; }
+        if (!(escapes % 2)) return NSMakeRange(NSNotFound, 0);
+    }
+    return NSMakeRange(start, selection.location - start);
+}
+
+- (BOOL)insertAutomaticEnvironmentEnd
+{
+    if (self.hasMarkedText || ![self.document fileIsTex] ||
+        [SUD boolForKey:@"DisableAutomaticEnvironmentCompletion"]) return NO;
+    NSRange range = self.selectedRange;
+    NSDictionary *completion = TSAutomaticEnvironmentInsertion(self.string, range, g_texChar);
+    if (!completion) return NO;
+    NSString *insertion = completion[@"text"];
+    [self dismissCommandSuggestions];
+    if (![self shouldChangeTextInRange:range replacementString:insertion]) return YES;
+    [self.textStorage replaceCharactersInRange:range withString:insertion];
+    [self didChangeText];
+    [self setSelectedRange:NSMakeRange(range.location + [completion[@"caret"] unsignedIntegerValue], 0)];
+    [self.undoManager setActionName:NSLocalizedString(@"Environment Completion", @"Environment Completion")];
+    return YES;
+}
+
+- (void)dismissCommandSuggestions
+{
+    self.commandRequest++;
+    [self.commandPanel.parentWindow removeChildWindow:self.commandPanel];
+    [self.commandPanel orderOut:nil];
+    self.commandCandidates = nil;
+}
+
+- (void)updateCommandSuggestions
+{
+    NSDictionary *argument = (!self.hasMarkedText && [self.document fileIsTex]) ? TSArgumentCompletion(self.string, self.selectedRange, g_texChar) : nil;
+    NSRange range = argument ? [argument[@"range"] rangeValue] : [self automaticCommandRange];
+    self.completingArgument = argument != nil;
+    if ([SUD boolForKey:@"DisableAutomaticCommandCompletion"] || range.location == NSNotFound ||
+        self.window.firstResponder != self || !self.window.isKeyWindow) {
+        [self dismissCommandSuggestions];
+        return;
+    }
+    if (![self.commandCatalogSource isEqualToString:g_commandCompletionList]) {
+        self.commandCatalogSource = g_commandCompletionList ?: @"";
+        NSMutableSet *entries = [NSMutableSet set];
+        NSRegularExpression *placeholders = [NSRegularExpression regularExpressionWithPattern:@"•(?:‹[^›]*›)?" options:0 error:NULL];
+        for (NSString *line in [self.commandCatalogSource componentsSeparatedByString:@"\n"]) {
+            // Aliases and environment expansions remain in the legacy completion path.
+            if (![line hasPrefix:@"\\"] || [line containsString:@":="] || [line containsString:@"#RET#\\"]) continue;
+            NSString *entry = [line stringByReplacingOccurrencesOfString:@"#INS#" withString:@""];
+            entry = [entry stringByReplacingOccurrencesOfString:@"#RET#" withString:@""];
+            entry = [placeholders stringByReplacingMatchesInString:entry options:0 range:NSMakeRange(0, entry.length) withTemplate:@""];
+            if ([entry containsString:@"#"] || [entry containsString:@"\\end{"]) continue;
+            [entries addObject:entry];
+        }
+        // Many Greek symbols in the legacy file exist only as shorthand aliases.
+        for (NSString *symbol in [@"alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa varkappa lambda mu nu xi pi varpi rho varrho sigma varsigma tau upsilon phi varphi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega" componentsSeparatedByString:@" "]) [entries addObject:[@"\\" stringByAppendingString:symbol]];
+        self.commandCatalog = [[entries allObjects] sortedArrayUsingSelector:@selector(compare:)];
+    }
+    NSString *prefix = [self.string substringWithRange:range];
+    if (!argument && g_texChar != '\\') prefix = [@"\\" stringByAppendingString:[prefix substringFromIndex:1]];
+    NSMutableArray *matches = [NSMutableArray array];
+    for (NSString *entry in (argument ? argument[@"values"] : self.commandCatalog)) {
+        if (argument || [entry hasPrefix:prefix]) [matches addObject:entry];
+        if (matches.count == 100) break;
+    }
+    if (!matches.count) { [self dismissCommandSuggestions]; return; }
+    self.commandPrefixRange = range;
+    self.commandCandidates = matches;
+    if (!self.commandPanel) {
+        self.commandPanel = [[NSPanel alloc] initWithContentRect:NSZeroRect styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:YES];
+        self.commandPanel.hasShadow = YES;
+        NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 360, 180)];
+        scroll.hasVerticalScroller = YES;
+        scroll.autohidesScrollers = YES;
+        self.commandTable = [[NSTableView alloc] initWithFrame:scroll.bounds];
+        NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"command"];
+        column.width = 340;
+        [self.commandTable addTableColumn:column];
+        self.commandTable.headerView = nil;
+        self.commandTable.rowHeight = 22;
+        self.commandTable.dataSource = self;
+        self.commandTable.delegate = self;
+        self.commandTable.target = self;
+        self.commandTable.action = @selector(acceptCommandSuggestion:);
+        scroll.documentView = self.commandTable;
+        self.commandPanel.contentView = scroll;
+    }
+    [self.commandTable reloadData];
+    [self.commandTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+    NSRect caret = [self firstRectForCharacterRange:self.selectedRange actualRange:NULL];
+    CGFloat height = MIN(matches.count, 8) * 22 + 4;
+    NSRect frame = NSMakeRect(caret.origin.x, caret.origin.y - height, 360, height);
+    NSRect screen = self.window.screen.visibleFrame;
+    frame.origin.x = MAX(NSMinX(screen), MIN(frame.origin.x, NSMaxX(screen) - frame.size.width));
+    if (frame.origin.y < NSMinY(screen)) frame.origin.y = NSMaxY(caret);
+    [self.commandPanel setFrame:frame display:YES];
+    if (!self.commandPanel.parentWindow) [self.window addChildWindow:self.commandPanel ordered:NSWindowAbove];
+    [self.commandPanel orderFront:nil];
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
+{
+    return self.commandCandidates.count;
+}
+
+- (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)row
+{
+    return self.commandCandidates[row];
+}
+
+- (void)acceptCommandSuggestion:(id)sender
+{
+    NSInteger row = self.commandTable.selectedRow;
+    NSDictionary *argument = self.completingArgument ? TSArgumentCompletion(self.string, self.selectedRange, g_texChar) : nil;
+    NSRange range = argument ? [argument[@"range"] rangeValue] : [self automaticCommandRange];
+    if (row < 0 || row >= self.commandCandidates.count || !NSEqualRanges(range, self.commandPrefixRange)) {
+        [self dismissCommandSuggestions]; return;
+    }
+    NSString *word = self.commandCandidates[row];
+    if (!self.completingArgument && g_texChar != '\\') word = [word stringByReplacingOccurrencesOfString:@"\\" withString:[NSString stringWithFormat:@"%C", g_texChar]];
+    [self dismissCommandSuggestions];
+    if (![self shouldChangeTextInRange:range replacementString:word]) return;
+    [self.textStorage replaceCharactersInRange:range withString:word];
+    [self didChangeText];
+    NSRange insertionArgument = self.completingArgument ? NSMakeRange(NSNotFound, 0) : [word rangeOfString:@"{}"];
+    [self setSelectedRange:NSMakeRange(range.location + (insertionArgument.location == NSNotFound ? word.length : insertionArgument.location + 1), 0)];
+    [self.undoManager setActionName:NSLocalizedString(@"Command Completion", @"Command Completion")];
+}
+
+- (void)setSelectedRanges:(NSArray<NSValue *> *)ranges affinity:(NSSelectionAffinity)affinity stillSelecting:(BOOL)stillSelecting
+{
+    [self dismissCommandSuggestions];
+    [super setSelectedRanges:ranges affinity:affinity stillSelecting:stillSelecting];
+}
+
+- (void)viewWillMoveToWindow:(NSWindow *)newWindow
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidResignKeyNotification object:self.window];
+    [self dismissCommandSuggestions];
+    [super viewWillMoveToWindow:newWindow];
+    if (newWindow) [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(commandWindowResigned:) name:NSWindowDidResignKeyNotification object:newWindow];
+}
+
+- (void)commandWindowResigned:(NSNotification *)notification
+{
+    [self dismissCommandSuggestions];
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+    [self dismissCommandSuggestions];
+    [super scrollWheel:event];
+}
+
+- (BOOL)resignFirstResponder
+{
+    [self dismissCommandSuggestions];
+    return [super resignFirstResponder];
+}
+
 // added by Terada (- (void)awakeFromNib)
 - (void)awakeFromNib
 {
@@ -1429,6 +1626,13 @@ static const CFAbsoluteTime MAX_WAIT_TIME = 10.0;
 	}
 
 	[super insertText: newString];
+    if (newString.length == 1 && !self.hasMarkedText) {
+        NSUInteger request = ++self.commandRequest;
+        __weak TSTextView *view = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (view && view.commandRequest == request) [view updateCommandSuggestions];
+        });
+    }
 }
 
 - (BOOL)writeSelectionToPasteboard:(NSPasteboard *)pboard type:(NSString *)type
@@ -2092,6 +2296,22 @@ static BOOL launchBibDeskAndOpenURLs(NSArray *fileURLs)
 
 - (void)keyDown:(NSEvent *)theEvent
 {
+    if (self.commandPanel.isVisible && self.commandCandidates.count) {
+        unsigned short key = theEvent.keyCode;
+        if (!(theEvent.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption))) {
+            if (key == 125 || key == 126) {
+                NSInteger row = self.commandTable.selectedRow + (key == 125 ? 1 : -1);
+                row = MAX(0, MIN(row, (NSInteger)self.commandCandidates.count - 1));
+                [self.commandTable selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+                [self.commandTable scrollRowToVisible:row];
+                return;
+            }
+            if (key == 36 || key == 48 || key == 76) { [self acceptCommandSuggestion:nil]; return; }
+            if (key == 53) { [self dismissCommandSuggestions]; return; }
+        }
+        [self dismissCommandSuggestions];
+    }
+
     
     // The following is from Antti Knowles, antti.knowles@unige.ch
     // If the user uses synctex from pdf to text, the selection is yellow. If additional selectios are made from the keyboard,
@@ -2501,6 +2721,7 @@ static BOOL launchBibDeskAndOpenURLs(NSArray *fileURLs)
 	}
 
 	[super keyDown: theEvent];
+    if (theEvent.keyCode == 51) [self updateCommandSuggestions];
 }
 
 

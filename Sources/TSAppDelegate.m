@@ -23,6 +23,7 @@
  */
 
 #import "TSAppDelegate.h"
+#import <CommonCrypto/CommonDigest.h>
 
 #import "globals.h"
 
@@ -425,6 +426,37 @@
 				  toPath:[EngineInactivePath stringByStandardizingPath]];
 	}
     
+    // Make the bundled multi-pass XeLaTeX engine available to existing users too.
+    // Preserve any customized active engine; never replace it on launch.
+    NSString *xeEnginePath = [[EnginePath stringByStandardizingPath] stringByAppendingPathComponent:@"xelatexmk.engine"];
+    if (![fileManager fileExistsAtPath:xeEnginePath]) {
+        NSString *bundledEngine = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/Engines/xelatexmk.engine"];
+        [self mirrorPath:bundledEngine toPath:xeEnginePath];
+    }
+
+    NSString *autoEnginePath = [[EnginePath stringByStandardizingPath] stringByAppendingPathComponent:@"AutoLaTeX.engine"];
+    NSData *installedAutoEngine = [NSData dataWithContentsOfFile:autoEnginePath];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(installedAutoEngine.bytes, (CC_LONG)installedAutoEngine.length, digest);
+    NSMutableString *installedHash = [NSMutableString string];
+    for (NSUInteger byte = 0; byte < CC_SHA256_DIGEST_LENGTH; byte++) [installedHash appendFormat:@"%02x", digest[byte]];
+    // Upgrade only the exact previous bundled script; preserve user modifications.
+    if (!installedAutoEngine || [installedHash isEqualToString:@"1c29308483eb68ad9099215b8de2dcfbd720b5d6abd1da5a489636371ec7fb4f"]) {
+        [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/Engines/AutoLaTeX.engine"] toPath:autoEnginePath];
+    }
+    // Find the Typeset menu by action, independent of localization.
+    for (NSMenuItem *top in NSApp.mainMenu.itemArray) {
+        NSMenu *menu = top.submenu;
+        BOOL isTypesetMenu = NO;
+        for (NSMenuItem *item in menu.itemArray) if (item.action == @selector(doTypeset:)) isTypesetMenu = YES;
+        if (isTypesetMenu) {
+            [menu addItem:[NSMenuItem separatorItem]];
+            [menu addItemWithTitle:NSLocalizedString(@"Use Automatic Workflow", @"Use Automatic Workflow") action:@selector(useAutomaticWorkflow:) keyEquivalent:@""];
+            [menu addItemWithTitle:NSLocalizedString(@"Build on Save", @"Build on Save") action:@selector(toggleBuildOnSave:) keyEquivalent:@""];
+            break;
+        }
+    }
+
     if (! [fileManager fileExistsAtPath: [HTMLHelpPath stringByStandardizingPath]] ){
         [self mirrorPath:[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"TeXShop/HTML"]
               toPath:[HTMLHelpPath stringByStandardizingPath]];

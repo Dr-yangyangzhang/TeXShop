@@ -1,0 +1,102 @@
+#!/usr/bin/perl
+# !TEX-pdfPreview
+# Automatic, incremental LaTeX workflow. Requires the existing TeX Live tools.
+use strict;
+use warnings;
+use Cwd qw(abs_path getcwd);
+use File::Basename qw(dirname basename);
+use File::Path qw(make_path);
+use File::Copy qw(copy);
+use File::Spec;
+use Text::ParseWords qw(shellwords);
+use Fcntl qw(:flock);
+$| = 1;
+my $detect_only = @ARGV && $ARGV[0] eq '--detect' ? shift(@ARGV) : '';
+my ($source, $options, $texbin) = @ARGV;
+die "AutoLaTeX: no source file supplied\n" unless defined $source;
+$source = abs_path($source) or die "AutoLaTeX: source file not found\n";
+my $directory = dirname($source);
+chdir $directory or die "AutoLaTeX: cannot enter source folder: $!\n";
+$ENV{PATH} = "$texbin:$ENV{PATH}" if defined($texbin) && length($texbin);
+
+sub uncomment {
+    my ($text) = @_;
+    my $result = '';
+    for my $line (split /\n/, $text) {
+        my $slashes = 0;
+        for my $c (split //, $line) {
+            last if $c eq '%' && $slashes % 2 == 0;
+            $result .= $c;
+            $slashes = $c eq '\\' ? $slashes + 1 : 0;
+        }
+        $result .= "\n";
+    }
+    return $result;
+}
+my %visited;
+my $read_count = 0;
+sub read_project {
+    my ($file, $depth) = @_;
+    return '' if $depth > 16 || $read_count >= 100;
+    my $path = abs_path($file);
+    return '' unless defined $path && -f $path && !$visited{$path}++;
+    $read_count++;
+    open my $in, '<', $path or return '';
+    local $/;
+    my $raw = <$in>;
+    close $in;
+    my $code = uncomment($raw);
+    my $combined = $code;
+    while ($code =~ /(?<!\\)\\(?:input|include|subfile)\s*\{([^{}]+)\}/g) {
+        my $name = $1;
+        next if $name =~ /[\\#]/;
+        $name .= '.tex' unless $name =~ /\.tex$/i;
+        # TeX resolves ordinary inputs relative to the root working directory.
+        my $input = File::Spec->catfile($directory, $name);
+        $combined .= read_project($input, $depth + 1);
+    }
+    return $combined;
+}
+open my $root, '<', $source or die "AutoLaTeX: cannot read source: $!\n";
+my $raw = do { local $/; <$root> };
+close $root;
+my $engine;
+# TS-program directives are already handled by TeXShop. TS-engine selects within AutoLaTeX.
+if ($raw =~ /^\s*%\s*!TEX\s+(?:TS-engine|engine)\s*=\s*(\S+)/mi) {
+    my %allowed = (pdflatex=>'pdflatex', xelatex=>'xelatex', lualatex=>'lualatex');
+    $engine = $allowed{lc $1} or die "AutoLaTeX: unsupported engine '$1'; use pdflatex, xelatex or lualatex\n";
+}
+# Standard compiler directives remain engine hints inside the automatic workflow.
+if (!$engine && $raw =~ /^\s*%\s*!TEX\s+(?:TS-program|program)\s*=\s*(\S+)/mi) {
+    my %hints = (pdflatex=>'pdflatex', xelatex=>'xelatex', lualatex=>'lualatex', pdflatexmk=>'pdflatex', xelatexmk=>'xelatex', lualatexmk=>'lualatex');
+    $engine = $hints{lc $1};
+}
+my $code = read_project($source, 0);
+if (!$engine) {
+    if ($code =~ /\\(?:directlua|latelua)\b|\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{[^}]*\b(?:luacode|luatexja|luaotfload)\b/) { $engine = 'lualatex'; }
+    elsif ($code =~ /\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{[^}]*\b(?:fontspec|unicode-math|xeCJK|polyglossia|ctex)\b|\\documentclass(?:\[[^\]]*\])?\{ctex(?:art|book|rep)\}|\\(?:setmainfont|setsansfont|setmonofont|setCJKmainfont|XeTeX\w*)\b/) { $engine = 'xelatex'; }
+    else { $engine = 'pdflatex'; }
+}
+print "AutoLaTeX: selected $engine; latexmk resolves bibliography and reruns\n";
+exit 0 if $detect_only;
+my $stem = basename($source, '.tex');
+my $build = File::Spec->catdir($directory, '.texshop-build', $stem);
+make_path($build);
+open my $lock, '>>', "$build/.lock" or die "AutoLaTeX: cannot create build lock: $!\n";
+flock($lock, LOCK_EX | LOCK_NB) or die "AutoLaTeX: this document is already building\n";
+my @extra = shellwords($options // '');
+# Output location and one-shot execution are controlled by this workflow.
+for (@extra) {
+    die "AutoLaTeX: output/jobname/continuous options are not supported\n" if /^-+(?:out(?:put)?(?:dir|directory)|aux(?:dir|directory)|jobname|pvc|pv|c(?:lean)?)(?:[=\-]|$)/;
+}
+my $mode = $engine eq 'xelatex' ? '-xelatex' : $engine eq 'lualatex' ? '-lualatex' : '-pdf';
+my @command = ('latexmk', @extra, $mode, '-interaction=nonstopmode', '-halt-on-error', '-file-line-error', '-synctex=1', "-outdir=$build", $source);
+my $status = system @command;
+exit($status == -1 ? 127 : ($status & 127) ? 128 + ($status & 127) : $status >> 8) if $status;
+my $pdf = "$build/$stem.pdf";
+die "AutoLaTeX: build did not produce a PDF\n" unless -f $pdf;
+my $published = "$directory/$stem.pdf";
+my $temporary = "$directory/.$stem.pdf.$$.tmp";
+copy($pdf, $temporary) or die "AutoLaTeX: cannot publish PDF: $!\n";
+rename($temporary, $published) or die "AutoLaTeX: cannot replace PDF: $!\n";
+print "AutoLaTeX: PDF published; auxiliary files retained in $build\n";
