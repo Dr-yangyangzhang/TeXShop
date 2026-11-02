@@ -227,3 +227,35 @@ Close other TeXShop instances before testing the rebuilt preview and check that 
 program dropdown says AutoLaTeX. Files produced by older builds are not deleted:
 validate output placement in a fresh folder to distinguish new artifacts from old
 ones. Screen sharing is not needed for automated tests or Git publication.
+
+## Paired delimiters and selection wrapping
+
+Typing `{`, `(`, `[` or `$` in a TeX source view inserts `{}`, `()`, `[]` or `$…$`
+with the caret inside. With text selected, the same keys surround the selected text
+and keep it selected, including multiline or Unicode selections. One Undo restores
+the original text; Redo reapplies the wrapping.
+
+Typing a matching `}`, `)` or `]` immediately before that existing character moves
+past it. In math, typing `$` before the existing closing dollar moves past it.
+Typing a second `$` immediately in a new empty dollar pair promotes it to `$$…$$`.
+Dollar-state detection accounts for comments, literal `\$` and multiline display
+math; arbitrary verbatim regions and macro expansion are not parsed.
+
+Empty-caret insertion leaves escaped literal symbols and comments alone. An explicit
+selection always wraps for supported opening delimiters, even in those contexts.
+Pastes, programmatic insertion, active IME composition, multiple selections and
+non-TeX views do not invoke this feature. Existing quote/superscript/subscript
+completion remains in its legacy path. Angle brackets are not paired because they
+are also mathematical comparison operators.
+
+Pairing is enabled by default independently of the legacy character-completion
+setting. Disable with `defaults write TeXShop DisableAutomaticDelimiterCompletion -bool YES`.
+Use `-bool NO` to re-enable.
+
+Validation: the Foundation runner adds 32 delimiter checks. Run
+`python3 Tests/test_delimiter_editor.py` for 12 native NSTextView checks using the
+actual insertion block, covering selection/caret behavior, Undo/Redo, rejected
+edits, closing-skip history, paste shortcuts, IME and non-TeX input. The complete
+native suite now has 113 checks. Xcode Debug builds successfully. Interactive
+keyboard testing on the user's input layout remains an acceptance check; no screen
+sharing is required for these automated checks or publication.

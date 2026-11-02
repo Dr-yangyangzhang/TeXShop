@@ -23,6 +23,7 @@
 #import "TSTextView.h"
 #import "TSAutomaticEnvironment.h"
 #import "TSArgumentCompletion.h"
+#import "TSDelimiterCompletion.h"
 #import "TSLaTeXPanelController.h"
 
 // added by mitsu --(A) g_texChar filtering
@@ -1587,6 +1588,28 @@ static const CFAbsoluteTime MAX_WAIT_TIME = 10.0;
     }
     // End of Fix
 
+    // Pair only typed input, never pasted text or active input-method composition.
+    NSEvent *inputEvent = NSApp.currentEvent;
+    if (aString && [self.document fileIsTex] && !self.hasMarkedText && self.selectedRanges.count == 1 &&
+        inputEvent.type == NSEventTypeKeyDown && !(inputEvent.modifierFlags & NSEventModifierFlagCommand) &&
+        ![SUD boolForKey:@"DisableAutomaticDelimiterCompletion"]) {
+        NSDictionary *edit = TSDelimiterCompletion(self.string, self.selectedRange, aString, g_texChar);
+        if (edit) {
+            [self dismissCommandSuggestions];
+            if (![edit[@"skip"] boolValue]) {
+                if (![self shouldChangeTextInRange:self.selectedRange replacementString:edit[@"text"]]) return;
+                [self breakUndoCoalescing];
+                [self.textStorage replaceCharactersInRange:self.selectedRange withString:edit[@"text"]];
+                [self didChangeText];
+                [self breakUndoCoalescing];
+                [self.undoManager setActionName:NSLocalizedString(@"Delimiter Completion", @"Delimiter Completion")];
+            }
+            [self setSelectedRange:[edit[@"selection"] rangeValue]];
+            // Opening a brace can also enter a command argument completion context.
+            if ([aString isEqualToString:@"{"]) [self updateCommandSuggestions];
+            return;
+        }
+    }
 
 	// AutoCompletion
 	// Code added by Greg Landweber for auto-completions of '^', '_', etc.

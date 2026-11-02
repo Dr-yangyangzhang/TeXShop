@@ -1,0 +1,72 @@
+#import <Cocoa/Cocoa.h>
+#import "TSDelimiterCompletion.h"
+#define SUD NSUserDefaults.standardUserDefaults
+static unichar g_texChar = '\\';
+@interface PairTestApplication : NSApplication
+@property (strong) NSEvent *testEvent;
+@end
+@implementation PairTestApplication
+- (NSEvent *)currentEvent { return self.testEvent; }
+@end
+@interface PairTestDocument : NSObject
+@property BOOL fileIsTex;
+@end
+@implementation PairTestDocument
+@end
+@interface PairTestView : NSTextView
+@property (strong) PairTestDocument *document;
+@property (strong) NSUndoManager *testUndo;
+@property BOOL reject;
+@property BOOL marked;
+@end
+@implementation PairTestView
+- (BOOL)hasMarkedText { return self.marked; }
+- (NSUndoManager *)undoManager { return self.testUndo; }
+- (BOOL)shouldChangeTextInRange:(NSRange)range replacementString:(NSString *)string
+{ return self.reject ? NO : [super shouldChangeTextInRange:range replacementString:string]; }
+- (void)dismissCommandSuggestions {}
+- (void)updateCommandSuggestions {}
+/* ACTUAL_EDITOR_INSERTION */
+@end
+static void Type(PairTestView *view, NSString *text)
+{
+    [view.testUndo beginUndoGrouping];
+    [view insertText:text];
+    [view.testUndo endUndoGrouping];
+}
+int main(void) { @autoreleasepool {
+    PairTestApplication *app = [PairTestApplication sharedApplication];
+    app.testEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:0 context:nil characters:@"{" charactersIgnoringModifiers:@"{" isARepeat:NO keyCode:33];
+    PairTestView *view = [[PairTestView alloc] initWithFrame:NSMakeRect(0, 0, 400, 300)];
+    view.document = [PairTestDocument new]; view.document.fileIsTex = YES;
+    view.testUndo = [NSUndoManager new]; view.testUndo.groupsByEvent = NO; view.allowsUndo = YES;
+    view.string = @"selected"; view.selectedRange = NSMakeRange(0, 8);
+    Type(view, @"{");
+    NSCAssert([view.string isEqualToString:@"{selected}"] && NSEqualRanges(view.selectedRange, NSMakeRange(1, 8)), @"native wrapping and selection");
+    [view.testUndo undo];
+    NSCAssert([view.string isEqualToString:@"selected"], @"native undo restores selection text");
+    [view.testUndo redo];
+    NSCAssert([view.string isEqualToString:@"{selected}"], @"native redo");
+    [view.testUndo removeAllActions]; view.string = @""; view.selectedRange = NSMakeRange(0, 0);
+    Type(view, @"$"); Type(view, @"$");
+    NSCAssert([view.string isEqualToString:@"$$$$"] && view.selectedRange.location == 2, @"display promotion native cursor");
+    [view.testUndo undo]; NSCAssert([view.string isEqualToString:@"$$"], @"display promotion undo");
+    [view.testUndo undo]; NSCAssert(!view.string.length, @"pair insertion undo");
+    [view.testUndo removeAllActions]; view.string = @"{}"; view.selectedRange = NSMakeRange(1, 0); [view.testUndo removeAllActions];
+    [view insertText:@"}"];
+    NSCAssert([view.string isEqualToString:@"{}"] && view.selectedRange.location == 2 && !view.testUndo.canUndo, @"closing skip changes no text or undo history");
+    view.string = @"text"; view.selectedRange = NSMakeRange(0, 4); view.reject = YES;
+    Type(view, @"[");
+    NSCAssert([view.string isEqualToString:@"text"] && NSEqualRanges(view.selectedRange, NSMakeRange(0, 4)), @"respect rejected edits");
+    view.reject = NO; view.marked = YES; view.string = @""; view.selectedRange = NSMakeRange(0, 0);
+    Type(view, @"("); NSCAssert([view.string isEqualToString:@"("], @"do not pair IME composition");
+    view.marked = NO; app.testEvent = nil; view.string = @""; view.selectedRange = NSMakeRange(0, 0);
+    Type(view, @"["); NSCAssert([view.string isEqualToString:@"["], @"do not pair programmatic insertion");
+    app.testEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:NSEventModifierFlagCommand timestamp:0 windowNumber:0 context:nil characters:@"v" charactersIgnoringModifiers:@"v" isARepeat:NO keyCode:9];
+    view.string = @""; view.selectedRange = NSMakeRange(0, 0);
+    Type(view, @"("); NSCAssert([view.string isEqualToString:@"("], @"single-character paste shortcut stays literal");
+    app.testEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:0 context:nil characters:@"[" charactersIgnoringModifiers:@"[" isARepeat:NO keyCode:33];
+    view.document.fileIsTex = NO; view.string = @""; view.selectedRange = NSMakeRange(0, 0);
+    Type(view, @"["); NSCAssert([view.string isEqualToString:@"["], @"non-TeX view stays unchanged");
+    printf("12 native editor insertion/undo checks passed\n");
+} return 0; }
