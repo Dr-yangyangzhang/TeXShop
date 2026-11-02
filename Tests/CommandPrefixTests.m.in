@@ -1,0 +1,24 @@
+#import <Cocoa/Cocoa.h>
+static unichar g_texChar = '\\';
+@interface TestDocument : NSObject
+- (BOOL)fileIsTex;
+@end
+@implementation TestDocument
+- (BOOL)fileIsTex { return YES; }
+@end
+@interface CommandProbe : NSObject
+@property NSRange selectedRange;
+@property (copy) NSString *string;
+@property BOOL hasMarkedText;
+@property (strong) TestDocument *document;
+@end
+@implementation CommandProbe
+/* COMMAND_RANGE_IMPLEMENTATION */
+@end
+int main(void) { @autoreleasepool {
+CommandProbe *v = [CommandProbe new]; v.document = [TestDocument new];
+NSArray *cases = @[@[@"\\sec", @YES], @[@"\\se", @YES], @[@"\\s", @NO], @[@"sec", @NO], @[@"\\\\sec", @NO], @[@"\\\\\\sec", @YES], @[@"% \\sec", @NO], @[@"\\% \\sec", @YES], @[@"% comment\n\\sec", @YES], @[@"\\section{", @NO], @[@"文字 \\sec", @YES]];
+for (NSArray *c in cases) { v.string=c[0]; v.selectedRange=NSMakeRange(v.string.length,0); BOOL found=[v automaticCommandRange].location != NSNotFound; NSCAssert(found == [c[1] boolValue], @"prefix case failed: %@", c[0]); }
+v.string=@"\\sec"; v.selectedRange=NSMakeRange(4,0); v.hasMarkedText=YES; NSCAssert([v automaticCommandRange].location==NSNotFound,@"IME"); v.hasMarkedText=NO; v.selectedRange=NSMakeRange(1,3); NSCAssert([v automaticCommandRange].location==NSNotFound,@"selection");
+printf("13 native prefix checks passed\n");
+} return 0; }
